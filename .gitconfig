@@ -1,0 +1,13 @@
+[user]
+	name = Craig Hagerman
+	email = craighagerman@gmail.com
+[core]
+	excludesfile = .gitignore
+[difftool "sourcetree"]
+	cmd = /Applications/kdiff3.app/Contents/MacOS/kdiff3 \"$LOCAL\" \"$REMOTE\"
+	path = 
+[mergetool "sourcetree"]
+	cmd = /Applications/kdiff3.app/Contents/MacOS/kdiff3 \"$BASE\" \"$LOCAL\" \"$REMOTE\" -o \"$MERGED\"
+	trustExitCode = true
+[commit]
+	template = /Users/chagerman/.stCommitMsg
