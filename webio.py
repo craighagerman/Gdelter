@@ -2,9 +2,9 @@ import logging
 import os
 from datetime import datetime
 
-import dragnet
+
 import pandas as pd
-import requests
+
 
 
 class WebIO:
