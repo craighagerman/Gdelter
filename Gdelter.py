@@ -255,7 +255,7 @@ class Gdelter:
         gutils = GdeltUtils()
         html_file = gutils.html_content_filepath(article_dir, gdelt_ymd, filename, True)
         content_file = gutils.html_content_filepath(article_dir, gdelt_ymd, filename)
-        if os.path.exists(html_file) or os.path.exists(content_file):
+        if os.path.exists(html_file) or os.path.exists(content_file) or os.path.exists(html_file + ".gz") or os.path.exists(content_file + ".gz"):
             return True
         return False
 
