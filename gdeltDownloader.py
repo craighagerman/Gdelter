@@ -1,4 +1,4 @@
-
+import gzip
 from datetime import datetime
 import logging
 import re
@@ -69,7 +69,8 @@ class Downloader(Thread):
     def save_html_content(self, content, filename, raw=False):
         file = self.html_content_filepath(self.article_dir, self.ymd, filename,  raw)
         os.makedirs(os.path.dirname(file), exist_ok=True)
-        with open(file, "w") as fo:
+        # write content as gzip-ed text
+        with gzip.open(file, "wt") as fo:
             fo.write(content)
 
 

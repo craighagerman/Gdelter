@@ -1,3 +1,4 @@
+import gzip
 import os
 from typing import List
 
@@ -26,7 +27,7 @@ class LastUpdate:
 
     def save_last_update(urls, file):
         os.makedirs(os.path.dirname(file), exist_ok=True)
-        with open(file, "w") as fo:
+        with gzip.open(file, "wt") as fo:
             fo.write("\n".join(urls))
 
 
