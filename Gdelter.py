@@ -282,14 +282,6 @@ class Gdelter:
 
         if not self._already_exists(filename, self.article_dir, gdelt_ymd):
             Downloader(url, eid, gid, metadata_dict, filename, self.article_dir, self.metadata_dir, self.ymd).start()
-
-            # self.logger.info("Downloading {}".format(url))
-            # status, html = self.webio.get_web_page(url)
-            # content = self.webio.get_content(html) if status == 200 else ""
-            # title, author, site_name, description, keywords = self._parse_metadata(html)
-            # self.webio.save_html_content(html, filename, True)
-            # self.webio.save_html_content(content, filename, False)
-
         else:
             self.logger.info("{} already exists".format(filename))
 

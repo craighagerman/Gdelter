@@ -15,3 +15,4 @@ RunCmd="/Gdelter/Gdelter.py"
 python3 $RunCmd -o -d $DataDir -k lastupdate
 
 
+#  /home/chagerman/Projects/NewsAggregator/Gdelter/scripts/docker_run_titanx.sh

@@ -1,8 +1,11 @@
+#!/bin/bash
 
+SRC_DIR="/Users/chagerman/Projects/2019_News/Code/Gdelter"
 
-INDIR="../"
-OUTDIR="chagerman@titanx:~/Projects/NewsAggregator/"
+TITANX="chagerman@titanx:~/Projects/NewsAggregator/"
+MPAT=""
+DEST_DIR=$TITANX
 
-rsync -ravp -e ssh  $INDIR $OUTDIR
+EXCLUDEFILE="rsync_exclude.txt"
 
-rsync -ravp -e ssh  /Users/chagerman/Projects/2019_News/Code/Gdelter  chagerman@titanx:~/Projects/NewsAggregator/
+rsync -ravp -e ssh  --exclude-from=$EXCLUDEFILE $SRC_DIR $DEST_DIR
