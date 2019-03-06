@@ -1,3 +1,7 @@
 build/
 *.pyc
 Data/*
+*text
+*html
+*csv
+*zip

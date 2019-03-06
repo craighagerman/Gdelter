@@ -1,4 +1,7 @@
 
+# class GdeltParameters:
+
+
 # define key for "events" and "gkg"
 EventsKey = "events"
 GkgKey = "gkg"
@@ -27,4 +30,7 @@ gkg_columns = ["GKGRECORDID", "DATE", "SourceCollectionIdentifier", "SourceCommo
 event_id_url_columns = ['GLOBALEVENTID', 'SOURCEURL']
 gkg_id_url_columns = ['GKGRECORDID', 'DocumentIdentifier']
 
+# define header names for url_metadata so that it can be (1) convereted to a Pandas Dataframe and saved to CSV
+metadata_columns = ['url', 'eventid', 'gkgid', 'status', 'accessdate', 'title', 'author', 'site_name',
+                         'description', 'keywords']
 

@@ -1,5 +1,6 @@
+import gzip
 import os
-
+from typing import List
 
 class LastUpdate:
 
@@ -14,9 +15,9 @@ class LastUpdate:
         return [x.strip().split()[-1] for x in open(file)]
 
 
-    def parse_lastupdate(self, response) -> list:
+    def parse_lastupdate(self, response) -> List:
         ''' Get lastupdate html response, extract and return the urls (last column) as a list[str] '''
-        urls = [x.split()[-1] for x in response.text.split("\n") if x]
+        urls : List[str] = [x.split()[-1] for x in response.text.split("\n") if x]
         return urls
 
 
@@ -26,7 +27,7 @@ class LastUpdate:
 
     def save_last_update(urls, file):
         os.makedirs(os.path.dirname(file), exist_ok=True)
-        with open(file, "w") as fo:
+        with gzip.open(file, "wt") as fo:
             fo.write("\n".join(urls))
 
 

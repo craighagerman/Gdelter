@@ -1,0 +1,25 @@
+######################################################################
+# n.b. copy this file to directory above Gdelter to build
+# build with docker build -t python-gdelt .
+######################################################################
+
+
+FROM python:3.7.2
+
+ADD Gdelter /Gdelter
+
+RUN pip install beautifulsoup4
+RUN pip install Click
+RUN pip install Cython
+RUN pip install lxml
+RUN pip install numpy
+RUN pip install dragnet
+RUN pip install metadata-parser
+RUN pip install pandas
+RUN pip install requests
+RUN pip install tqdm
+
+
+
+
+CMD [ "python", "/Gdelter/Gdelter.py", "-o", "-d", "/Gdelt_Data", "-k", "lastupdate"]

@@ -1,3 +1,4 @@
+import gzip
 import logging
 import os
 
@@ -5,7 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-import GdeltParameters
+import gdeltParameters
 
 '''
   gdelt_event_masterlist = "http://data.gdeltproject.org/events/index.html"
@@ -20,9 +21,7 @@ class MasterList:
         self.basedir = basedir
         # create logger with 'spam_application'
         logging.basicConfig(level=logging.INFO)
-        self.logger = logging.getLogger('Gdelter')
-
-
+        self.logger = logging.getLogger('Masterlist')
 
 
 
@@ -35,9 +34,10 @@ class MasterList:
         evenk_links = self._get_all_links(event_r, event_masterlist_url)
         gkg_links = self._get_all_links(gkg_r, gkg_masterlist_url)
 
-        event_file = "{}_{}.txt".format(GdeltParameters.EventsKey, datetime.now().strftime("%Y-%m-%d"))
+        event_file = "{}_{}.txt".format(gdeltParameters.EventsKey, datetime.now().strftime("%Y-%m-%d"))
         self._save_masterlist_urls(evenk_links, os.path.join(self.basedir, "masterlist", event_file))
-        gkg_file = "{}_{}.txt".format(GdeltParameters.GkgKey, datetime.now().strftime("%Y-%m-%d"))
+
+        gkg_file = "{}_{}.txt".format(gdeltParameters.GkgKey, datetime.now().strftime("%Y-%m-%d"))
         self._save_masterlist_urls(gkg_links, os.path.join(self.basedir, "masterlist", gkg_file))
 
 
@@ -70,8 +70,11 @@ class MasterList:
 
     def _save_masterlist_urls(self, masterlist, file):
         os.makedirs(os.path.dirname(file), exist_ok=True)
-        with open(file, "w") as fo:
+        with gzip.open(file, "wt") as fo:
             fo.write("\n".join(masterlist))
+
+
+
 
 
 
@@ -79,6 +82,21 @@ class MasterList:
     # TODO : ----- STUBS -----
     def _get_ymd_from_url(self, url):
         gdelt_timestamp = os.path.basename(url).split(".")[0]
+
+
+    # read masterlist file in an iterator, get the url, parse for date, return just files with date searched for
+    def wip(self, masterlist_file, gdate):
+        masterlist_urls = (x.strip().split()[-1] for x in open(masterlist_file))
+        urls = [u for u in masterlist_urls if os.path.basename(u).startswith(gdate) ]
+
+
+
+
+
+
+
+
+
 
 
 

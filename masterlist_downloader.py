@@ -11,7 +11,7 @@
 
 
 
-from gdelt_decorators import *
+from gdeltDecorators import *
 from gdelt_downloader import *
 
 
@@ -80,8 +80,6 @@ def parse_csv_file():
   basedir = "/Users/chagerman/Projects/2019_News/Data/Gdelt_out"
   event_url = "http://data.gdeltproject.org/events/20190228.export.CSV.zip"
   gkg_url = "http://data.gdeltproject.org/gkg/20190228.gkg.csv.zip"
-
-
 
   event_file = get_zip_urls(event_url, basedir, "events")[0]
   gkg_file = get_zip_urls(gkg_url, basedir, "gkg")[0]

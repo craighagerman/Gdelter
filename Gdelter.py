@@ -13,11 +13,11 @@ import requests
 from collections import defaultdict
 from tqdm import tqdm
 
-import GdeltParameters
-from downloader import Downloader
-from gdelt_decorators import *
+import gdeltParameters
+from gdeltDownloader import Downloader
+from gdeltDecorators import *
 from gdeltutils import GdeltUtils
-from webio import WebIO
+
 
 
 '''
@@ -87,7 +87,7 @@ class Gdelter:
 
         self.ymd = datetime.now().strftime("%Y-%m-%d")
         # self.gdelt_ymd =
-        self.webio = WebIO(self.article_dir, self.metadata_dir, self.ymd)
+        # self.webio = WebIO(self.article_dir, self.metadata_dir, self.ymd)
 
         self.MetadataFileKey = "url_metadata.csv"
 
@@ -131,16 +131,16 @@ class Gdelter:
         self.logger.info("Decompressing and saving GDELT Event and GKG zip files... ")
         gutils = GdeltUtils()
         events_url = lastupdate_dict['export']
-        events_basedir = os.path.join(self.basedir, GdeltParameters.EventsKey, gdelt_ymd)
+        events_basedir = os.path.join(self.basedir, gdeltParameters.EventsKey, gdelt_ymd)
         events_file = gutils.decompress_zip_url(events_url, events_basedir)
-        gkg_url = lastupdate_dict[GdeltParameters.GkgKey]
-        gkg_basedir = os.path.join(self.basedir, GdeltParameters.GkgKey, gdelt_ymd)
+        gkg_url = lastupdate_dict[gdeltParameters.GkgKey]
+        gkg_basedir = os.path.join(self.basedir, gdeltParameters.GkgKey, gdelt_ymd)
         gkg_file = gutils.decompress_zip_url(gkg_url, gkg_basedir)
 
         # parse Events & GKG files; create a master list of [url, event_id, gkg_id]
         self.logger.info("Parsing event and gkg extract files ...")
-        event_id_urls = self._parse_gdelt_file(events_file, GdeltParameters.EventsKey)
-        gkg_id_urls = self._parse_gdelt_file(gkg_file, GdeltParameters.GkgKey)
+        event_id_urls = self._parse_gdelt_file(events_file, gdeltParameters.EventsKey)
+        gkg_id_urls = self._parse_gdelt_file(gkg_file, gdeltParameters.GkgKey)
         self.logger.info("creating a single list of article urls ...")
         url_ids = self._create_event_gkg_url_dict(event_id_urls, gkg_id_urls)
 
@@ -208,9 +208,9 @@ class Gdelter:
     def _parse_gdelt_file(self, file, gdelt_type):
         self.logger.info("parsing gdelt type {} for extract file {}".format(gdelt_type, file))
         df = pd.read_csv(file, sep="\t", header=None)
-        columns = GdeltParameters.event_columns if gdelt_type == GdeltParameters.EventsKey else GdeltParameters.gkg_columns
+        columns = gdeltParameters.event_columns if gdelt_type == gdeltParameters.EventsKey else gdeltParameters.gkg_columns
         df.columns = columns
-        id_url_columns = GdeltParameters.event_id_url_columns if gdelt_type == GdeltParameters.EventsKey else GdeltParameters.gkg_id_url_columns
+        id_url_columns = gdeltParameters.event_id_url_columns if gdelt_type == gdeltParameters.EventsKey else gdeltParameters.gkg_id_url_columns
         id_url = df[id_url_columns].values.tolist()
         return id_url
 
@@ -241,7 +241,7 @@ class Gdelter:
         metadata_dict = defaultdict(list)
         for ui in url_ids:
             self._process_url_list(ui, metadata_dict, gdelt_ymd)
-        self.webio.save_url_metadata(metadata_dict, self.MetadataFileKey)
+        self._save_url_metadata(metadata_dict, self.MetadataFileKey)
 
 
 
@@ -255,7 +255,7 @@ class Gdelter:
         gutils = GdeltUtils()
         html_file = gutils.html_content_filepath(article_dir, gdelt_ymd, filename, True)
         content_file = gutils.html_content_filepath(article_dir, gdelt_ymd, filename)
-        if os.path.exists(html_file) or os.path.exists(content_file):
+        if os.path.exists(html_file) or os.path.exists(content_file) or os.path.exists(html_file + ".gz") or os.path.exists(content_file + ".gz"):
             return True
         return False
 
@@ -282,18 +282,18 @@ class Gdelter:
 
         if not self._already_exists(filename, self.article_dir, gdelt_ymd):
             Downloader(url, eid, gid, metadata_dict, filename, self.article_dir, self.metadata_dir, self.ymd).start()
-
-            # self.logger.info("Downloading {}".format(url))
-            # status, html = self.webio.get_web_page(url)
-            # content = self.webio.get_content(html) if status == 200 else ""
-            # title, author, site_name, description, keywords = self._parse_metadata(html)
-            # self.webio.save_html_content(html, filename, True)
-            # self.webio.save_html_content(content, filename, False)
-
         else:
             self.logger.info("{} already exists".format(filename))
 
 
+    def _save_url_metadata(self, metadata_dict, name):
+        url_metadata = list(metadata_dict.values())
+        file = os.path.join(self.metadata_dir, self.ymd, name)
+        self.logger.info("saving latest results to {}".format(file))
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+        df = pd.DataFrame(url_metadata, columns=gdeltParameters.metadata_columns)
+        # save metadata as a gzip-ed CSV file to `metadata` directory
+        df.to_csv(file, sep="\t", index=False, compression="gzip")
 
 
 

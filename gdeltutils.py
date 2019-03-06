@@ -30,7 +30,7 @@ class GdeltUtils:
         :param url:       url of the zipfile to download
         :return:    a ZipFile object
         '''
-        r = requests.get(url, timeot=25)
+        r = requests.get(url, timeout=25)
         z = zipfile.ZipFile(io.BytesIO(r.content))
         return z    # type: zipfile.ZipFile
 
