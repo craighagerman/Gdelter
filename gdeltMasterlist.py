@@ -76,11 +76,12 @@ class MasterList:
 
 
 
+
+
+
     # TODO : ----- STUBS -----
     def _get_ymd_from_url(self, url):
         gdelt_timestamp = os.path.basename(url).split(".")[0]
-
-
 
 
     # read masterlist file in an iterator, get the url, parse for date, return just files with date searched for
