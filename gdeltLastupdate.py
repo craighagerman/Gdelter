@@ -27,7 +27,7 @@ class LastUpdate:
 
     def save_last_update(urls, file):
         os.makedirs(os.path.dirname(file), exist_ok=True)
-        with gzip.open(file, "wt") as fo:
+        with gzip.open("{}.gz".format(file), "wt") as fo:
             fo.write("\n".join(urls))
 
 

@@ -1,5 +1,5 @@
 #!/home/chagerman/.pyenv/shims/python
-
+import gzip
 import logging
 import os
 import re
@@ -83,24 +83,20 @@ class Gdelter:
 
         # define output directory paths
         self.article_dir = os.path.join(self.basedir, "articles")
-        self.metadata_dir = os.path.join(self.basedir, "metadata")
+        self.status_dir = os.path.join(self.basedir, "articles_status")
+        self.metadata_dict_dir = os.path.join(self.basedir, "metadata_dict")
+        self.page_link_dir = os.path.join(self.basedir, "page_links")
+        self.domain_dir = os.path.join(self.basedir, "domains")
 
         self.ymd = datetime.now().strftime("%Y-%m-%d")
-        # self.gdelt_ymd =
-        # self.webio = WebIO(self.article_dir, self.metadata_dir, self.ymd)
+        self.gdelt_ymd = self.ymd
 
         self.MetadataFileKey = "url_metadata.csv"
-
 
         # create logger with 'spam_application'
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('Gdelter')
-        # self.logger.setLevel(logging.INFO)
-
-        # TODO : delete - moved to GdeltParameters
-        # # define key for "events" and "gkg"
-        # self.EventsKey = "events"
-        # self.GkgKey = "gkg"
+        self.logger.setLevel(logging.INFO)
 
         # define column names from Gdelt event and gkg extract files
         self.EventIDColumnKey = "GLOBALEVENTID"
@@ -114,43 +110,61 @@ class Gdelter:
     @timeit
     def process_last_update(self):
         # urls: List[str]
+        start_time = time.time()
         self.logger.info("Getting lastupdate urls ... ")
         urls = self._get_lastupdate()
-        # TODO : delete gdelt_ymd
-        gdelt_ymd = self._get_gdelt_date(urls)
-        self.ymd = gdelt_ymd
+        self.ymd, self.gdelt_ymd = self._get_gdelt_date(urls)
+        self.logger.info("GDELT Year-Month-Date: {}".format(self.ymd))
 
-        self.logger.info("GDELT Year-Month-Date: {}".format(gdelt_ymd))
-        self.webio.setymd(gdelt_ymd)
+        # define output paths
+        events_basedir = os.path.join(self.basedir, gdeltParameters.EventsKey, self.ymd)
+        gkg_basedir = os.path.join(self.basedir, gdeltParameters.GkgKey, self.ymd)
 
+        # create a dictionary of {gdelt_extract_type -> url}
         self.logger.info("Creating a dictionary of gdelt type -> lastupdate urls... ")
-        # TODO : should the urls just be passes in as a dict rather than a list?
         lastupdate_dict = self._get_lastupdate_dict(urls)
 
         # get the Events (export) and GKG urls from `lastupdate`
         self.logger.info("Decompressing and saving GDELT Event and GKG zip files... ")
+
+        # TODO : think about making GdeltUtils into a staticmethod class
+        # download, decompress and save the events and gkg update file(s)
         gutils = GdeltUtils()
         events_url = lastupdate_dict['export']
-        events_basedir = os.path.join(self.basedir, gdeltParameters.EventsKey, gdelt_ymd)
-        events_file = gutils.decompress_zip_url(events_url, events_basedir)
+        events_files = gutils.decompress_zip_url(events_url, events_basedir)
         gkg_url = lastupdate_dict[gdeltParameters.GkgKey]
-        gkg_basedir = os.path.join(self.basedir, gdeltParameters.GkgKey, gdelt_ymd)
-        gkg_file = gutils.decompress_zip_url(gkg_url, gkg_basedir)
+        gkg_files = gutils.decompress_zip_url(gkg_url, gkg_basedir)
 
         # parse Events & GKG files; create a master list of [url, event_id, gkg_id]
         self.logger.info("Parsing event and gkg extract files ...")
-        event_id_urls = self._parse_gdelt_file(events_file, gdeltParameters.EventsKey)
-        gkg_id_urls = self._parse_gdelt_file(gkg_file, gdeltParameters.GkgKey)
+        event_id_urls = self._parse_gdelt_files(events_files, gdeltParameters.EventsKey)
+        gkg_id_urls = self._parse_gdelt_files(gkg_files, gdeltParameters.GkgKey)
+
+        # compress/re-save events_file, gkg_file as gzip
+        self._resave_compressed_files(events_files)
+        self._resave_compressed_files(gkg_files)
+
+        # merge event and gkg urls from event_id_urls, gkg_id_urls lists
         self.logger.info("creating a single list of article urls ...")
         url_ids = self._create_event_gkg_url_dict(event_id_urls, gkg_id_urls)
 
+
         # iterate through all urls, downloading articles & web page metadata, save results
         self.logger.info("Downloading and saving articles & metadata from GDELT news articles ...")
-        self._download_and_save_articles(url_ids, gdelt_ymd)
+        self._download_and_save_articles(url_ids, self.ymd)
 
         # finish
+        end_time = time.time()
+        duration = int((end_time - start_time) / 60)
         self.logger.info("-" * 50)
-        self.logger.info("finished processing {} urls".format(len(url_ids)))
+        self.logger.info("finished processing {} urls in {} minutes".format(len(url_ids), duration))
+        print("\n")
+        print("self.article_dir :	 {}".format(self.article_dir))
+        print("self.status_dir :	 {}".format(self.status_dir))
+        print("self.metadata_dict_dir :	 {}".format(self.metadata_dict_dir))
+        print("self.page_link_dir :	 {}".format(self.page_link_dir))
+        print("self.domain_dir :	 {}".format(self.domain_dir))
+        print("\n")
         self.logger.info("-" * 50)
 
 
@@ -175,6 +189,12 @@ class Gdelter:
                 url => get web page, split into lines
                 file => open file, read lines
             Parse last update and return a list of urls
+
+            Example:
+                retrieve latest update and return:
+                    ['http://data.gdeltproject.org/gdeltv2/20190311214500.export.CSV.zip',
+                    'http://data.gdeltproject.org/gdeltv2/20190311214500.mentions.CSV.zip',
+                    'http://data.gdeltproject.org/gdeltv2/20190311214500.gkg.csv.zip']
         '''
         if (self.url):
             urls: List[str]     # a list of urls extracted from lastupdate file
@@ -198,14 +218,54 @@ class Gdelter:
 
 
     def _get_lastupdate_dict(self, urls):
+        '''
+        :param urls: List[str] of urls
+        :return:      Dictionary[file_type, url]
+
+        Example:
+            return a dictionary containing:
+                {'export': 'http://data.gdeltproject.org/gdeltv2/20190311214500.export.CSV.zip',
+                'mentions': 'http://data.gdeltproject.org/gdeltv2/20190311214500.mentions.CSV.zip',
+                'gkg': 'http://data.gdeltproject.org/gdeltv2/20190311214500.gkg.csv.zip'}
+        '''
         return {u.split(".")[-3]: u.strip() for u in tqdm(urls)}
 
     def _get_gdelt_date(self, urls):
         gdelt_timestamp = os.path.basename(urls[0]).split(".")[0]
-        return gdelt_timestamp[:8]  # only return the year-month-date part
+        return gdelt_timestamp[:8], gdelt_timestamp   # only return the year-month-date part
+
+
+
+
+
+
+
+
+    # WIP ------------------------------------------------------------------------------------------
+    def _parse_gdelt_files(self, files, gdelt_type):
+        id_url = []
+        for file in files:
+            id_url.extend(self._parse_gdelt_file(file, gdelt_type))
+        return id_url
 
 
     def _parse_gdelt_file(self, file, gdelt_type):
+        '''
+        Read the local (event or gkg) update file (just un-zipped and saved locally)
+        and parse to extract all article ids and urls
+
+        :param file:   path to event or gkg file
+        :param gdelt_type: One of gdeltParameters.EventsKey  or gdeltParameters.GkgKey
+        :return:        list of (id, url)
+
+        Example:
+            Return a (long) list of (event_id, url) pairs for all of the events/urls in a given event (or gkg) update file
+
+            [[829989575, 'http://theparisnews.com/free/article_dde86092-441c-11e9-98b3-dfbd58a5d0d4.html'],
+            [829989576, 'https://www.vox.com/policy-and-politics/2019/3/11/18260152/trump-budget-opioid-epidemic-2019'],
+            [829989577, 'http://theparisnews.com/free/article_dde86092-441c-11e9-98b3-dfbd58a5d0d4.html'],
+            [829989578, 'https://www.milforddailynews.com/news/20190311/blackstone-valley-tech-to-pay-for-own-roof-repair-project'],
+        '''
         self.logger.info("parsing gdelt type {} for extract file {}".format(gdelt_type, file))
         df = pd.read_csv(file, sep="\t", header=None)
         columns = gdeltParameters.event_columns if gdelt_type == gdeltParameters.EventsKey else gdeltParameters.gkg_columns
@@ -216,9 +276,23 @@ class Gdelter:
 
 
     def _create_event_gkg_url_dict(self, event_id_urls, gkg_id_urls):
+        '''
+        Merge event and gkg urls (i.e. from event_id_urls & gkg_id_urls), dropping duplicates
+
+        :param event_id_urls:
+        :param gkg_id_urls:
+        :return:
+
+        Example:
+            Return a (long) list of (url, event_id, gkg_id)
+
+            [['http://theparisnews.com/free/article_dde86092-441c-11e9-98b3-dfbd58a5d0d4.html',829990672, '20190311214500-2318'],
+            ['https://www.vox.com/policy-and-politics/2019/3/11/18260152/trump-budget-opioid-epidemic-2019', 829990601, '20190311214500-1355'],
+            ['https://www.milforddailynews.com/news/20190311/blackstone-valley-tech-to-pay-for-own-roof-repair-project', 829991140, '20190311214500-1473'],
+        '''
         # check for duplicates
         # TODO : the following is an unneeded expense. Remove after getting enough stats on duplicates
-        def check_dups(event_id_urls, gkg_id_urls):
+        def log_dups(event_id_urls, gkg_id_urls):
             event_urls = [url for gid, url in event_id_urls]
             gkg_urls = [url for gid, url in gkg_id_urls]
             self.logger.info("Number of Event urls: {}".format(len(event_urls)))
@@ -227,7 +301,7 @@ class Gdelter:
             if len(gkg_urls) != len(set(gkg_urls)): self.logger.warning("*\tGKG urls contain {} duplicates".format(len(gkg_urls) - len(set(gkg_urls))))
 
         self.logger.info("Checking event & gkg urls for duplicates...")
-        check_dups(event_id_urls, gkg_id_urls)
+        log_dups(event_id_urls, gkg_id_urls)
 
         event_url_dict = {url: gid for gid, url in event_id_urls}
         gkg_url_dict = {url: gid for gid, url in gkg_id_urls}
@@ -264,36 +338,57 @@ class Gdelter:
         # return s.replace("\n", " ").replace("\t", " ")
         return re.sub("[\n\r\t]", " ", s)
 
-    def _parse_metadata(self, HTML_str):
-        page = metadata_parser.MetadataParser(html=HTML_str)
-        metadata = {x: page.metadata[x] for x in page.metadata if
-                    page.metadata[x] and isinstance(page.metadata[x], dict)}
-        title = page.get_metadatas('title')
-        author = page.get_metadatas('author')
-        site_name = page.get_metadatas('site_name')
-        description = page.get_metadatas('description')
-        keywords = page.get_metadatas('news_keywords')
-        metas = [title, author, site_name, description, keywords]
-        return [self._clean_metadata(x[0]) if isinstance(x, list) else "" for x in metas]
+    # def _parse_metadata(self, HTML_str):
+    #     page = metadata_parser.MetadataParser(html=HTML_str)
+    #     metadata = {x: page.metadata[x] for x in page.metadata if
+    #                 page.metadata[x] and isinstance(page.metadata[x], dict)}
+    #     title = page.get_metadatas('title')
+    #     author = page.get_metadatas('author')
+    #     site_name = page.get_metadatas('site_name')
+    #     description = page.get_metadatas('description')
+    #     keywords = page.get_metadatas('news_keywords')
+    #     metas = [title, author, site_name, description, keywords]
+    #     return [self._clean_metadata(x[0]) if isinstance(x, list) else "" for x in metas]
 
     def _process_url_list(self, url_ids, metadata_dict, gdelt_ymd):
         url, eid, gid = url_ids
         filename = eid if eid else  "g_{}".format(gid)
 
         if not self._already_exists(filename, self.article_dir, gdelt_ymd):
-            Downloader(url, eid, gid, metadata_dict, filename, self.article_dir, self.metadata_dir, self.ymd).start()
+            Downloader(url, eid, gid, metadata_dict, filename, self.article_dir, self.status_dir, self.ymd).start()
         else:
             self.logger.info("{} already exists".format(filename))
 
 
     def _save_url_metadata(self, metadata_dict, name):
         url_metadata = list(metadata_dict.values())
-        file = os.path.join(self.metadata_dir, self.ymd, name)
+        file = os.path.join(self.status_dir, self.ymd, "{}_{}".format(self.gdelt_ymd, name))
         self.logger.info("saving latest results to {}".format(file))
+        print("\n\tSaving URL METADATA to: {}.gz\n".format(file))
         os.makedirs(os.path.dirname(file), exist_ok=True)
         df = pd.DataFrame(url_metadata, columns=gdeltParameters.metadata_columns)
         # save metadata as a gzip-ed CSV file to `metadata` directory
-        df.to_csv(file, sep="\t", index=False, compression="gzip")
+        df.to_csv(file+".gz", sep="\t", index=False, compression="gzip")
+
+
+
+    # TODO : move to a staticmethod of a util class
+    def _resave_compressed_files(self, files):
+        for file in files:
+            self._resave_compressed(file)
+
+    def _resave_compressed(self, file):
+        lines = (x for x in open(file))
+        self.logger.info("Compressing {} ...".format(file))
+        gzfile = file + ".gz"
+        with gzip.open(gzfile, 'wt') as fo:
+            for line in lines:
+                fo.write(line)
+
+        if os.path.isfile(file) and os.path.isfile(gzfile):
+            os.remove(file)
+        else:  ## Show an error ##
+            self.logger.error("Error: {}, {} files not found".format(file, gzfile))
 
 
 
@@ -302,8 +397,7 @@ class Gdelter:
 
 
 
-
-    #
+            #
     #
     #
 

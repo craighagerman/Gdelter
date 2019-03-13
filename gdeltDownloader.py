@@ -1,23 +1,33 @@
 import gzip
-from datetime import datetime
+import json
 import logging
-import re
-from threading import Thread
-
 import os
+import re
+from collections import Counter
+from datetime import datetime
+from threading import Thread
+from typing import Dict, List
+from urllib.parse import urlparse
 
 import dragnet
 import metadata_parser
 import requests
 
-from typing import Dict, List
 
-import sys
+
+from bs4 import BeautifulSoup
 
 
 class Downloader(Thread):
 
-    def __init__(self, url, eid, gid, metadata_dict, filename, article_dir="articles", metadata_dir="metadata", ymd=datetime.now().strftime("%Y-%m-%d")):
+    def __init__(self, url, eid, gid, metadata_dict, filename,
+                 article_dir="articles",
+                 metadata_dir="metadata",
+                 ymd=datetime.now().strftime("%Y-%m-%d"),
+                 metadata_dict_dir="metadata_dict",
+                 page_link_dir="page_links",
+                 domain_dir="domains"
+                 ):
         super().__init__()
         self.url = url
         self.eid = eid
@@ -31,6 +41,10 @@ class Downloader(Thread):
         self.ymd = ymd
         self.metadata_dir = metadata_dir
 
+        self.metadata_dict_dir = metadata_dict_dir
+        self.page_link_dir = page_link_dir
+        self.domain_dir = domain_dir
+
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('Gdelter')
 
@@ -40,11 +54,30 @@ class Downloader(Thread):
         status, html = self.get_web_page(self.url)
         content = self.get_content(html) if status == 200 else ""
 
-        title, author, site_name, description, keywords = self._parse_metadata(html)
-        self.save_html_content(html, self.filename, True)
+        file_size_bytes = len(html)
+
+
+        # WIP -------------------------------------------------------------------------------------------   start   ----
+        meta = self._extract_meta(html)
+        # TODO : define a metadata path
+        meta_dictionary_filename = ""
+        self.save_meta_dictionary(meta, meta_dictionary_filename)
+
+        page_links_filename = ""
+        domain_filename = ""
+        page_links, domain_counts = self._extract_all_links(html)
+        self._save_links(page_links, page_links_filename)
+        self._save_domains(domain_counts, domain_filename)
+
+        # WIP ---------------------------------------------------------------------------------------------   end   ----
+
+
+
+        # self.save_html_content(html, self.filename, True)
         self.save_html_content(content, self.filename, False)
 
-        metadata = [self.url, self.eid, self.gid, status, self.ymd, title, author, site_name, description, keywords]
+        title, site_name = self._parse_metadata(html)
+        metadata = [self.url, self._get_domain(self.url), file_size_bytes, self.eid, self.gid, status, self.ymd, title, site_name]
         # u = self.url
         # print("self.url:  {}".format(self.url))
         self.metadata_dict[self.url] = metadata
@@ -70,8 +103,31 @@ class Downloader(Thread):
         file = self.html_content_filepath(self.article_dir, self.ymd, filename,  raw)
         os.makedirs(os.path.dirname(file), exist_ok=True)
         # write content as gzip-ed text
-        with gzip.open(file, "wt") as fo:
+        with gzip.open("{}.gz".format(file), "wt") as fo:
             fo.write(content)
+
+
+    def save_meta_dictionary(self, metadata, filename):
+        file = self.build_filepath(self.metadata_dict_dir, filename)
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+        with gzip.open("{}.gz".format(file), "wt") as fo:
+            json.dump(metadata, fo, indent=4)
+
+
+    def _save_links(self, links, filename):
+        file = self.build_filepath(self.page_link_dir, filename)
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+        with gzip.open("{}.gz".format(file), "wt") as fo:
+            fo.write("\n".join(links))
+
+    def _save_domains(self, counter, filename):
+        file = self.build_filepath(self.domain_dir, filename)
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+        with gzip.open("{}.gz".format(file), "wt") as fo:
+            json.dump(counter, fo, indent=4)
+
+
+
 
 
     def get_content(self, html):
@@ -100,6 +156,9 @@ class Downloader(Thread):
             return os.path.join(article_dir, "{}".format(ymd), "{}.text".format(filename))
 
 
+    def build_filepath(self, dir, filename):
+        return os.path.join(dir, "{}".format(self.ymd), "{}.text".format(filename))
+
 
     def _clean_metadata(self, s):
         # return s.replace("\n", " ").replace("\t", " ")
@@ -110,14 +169,33 @@ class Downloader(Thread):
         metadata = {x: page.metadata[x] for x in page.metadata if
                     page.metadata[x] and isinstance(page.metadata[x], dict)}
         title = page.get_metadatas('title')
-        author = page.get_metadatas('author')
+        # author = page.get_metadatas('author')
         site_name = page.get_metadatas('site_name')
-        description = page.get_metadatas('description')
-        keywords = page.get_metadatas('news_keywords')
-        metas = [title, author, site_name, description, keywords]
+        # description = page.get_metadatas('description')
+        # keywords = page.get_metadatas('news_keywords')
+        metas = [title, site_name]
         return [self._clean_metadata(x[0]) if isinstance(x, list) else "" for x in metas]
 
 
+    def _extract_meta(self, html_content):
+        page = metadata_parser.MetadataParser(html=html_content)
+        metadata : Dict = {x: page.metadata[x] for x in page.metadata if
+                    page.metadata[x] and isinstance(page.metadata[x], dict)}
+        return metadata
 
+
+
+    def _get_domain(self, url):
+        parsed_url = urlparse(url)
+        return '{uri.scheme}://{uri.netloc}/'.format(uri=parsed_url)
+
+
+    def _extract_all_links(self, html_content):
+        soup = BeautifulSoup(html_content, 'lxml')
+        links = [a.get('href') for a in soup.find_all('a', href=True) if a.get('href').startswith("http")]
+
+        domains = [self._get_domain(a) for a in links]
+        c = Counter(domains)
+        return links, c
 
 

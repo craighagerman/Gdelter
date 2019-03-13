@@ -6,6 +6,6 @@ TITANX="chagerman@titanx:~/Projects/NewsAggregator/"
 MPAT=""
 DEST_DIR=$TITANX
 
-EXCLUDEFILE="rsync_exclude.txt"
+EXCLUDEFILE="scripts/rsync_exclude.txt"
 
 rsync -ravp -e ssh  --exclude-from=$EXCLUDEFILE $SRC_DIR $DEST_DIR
