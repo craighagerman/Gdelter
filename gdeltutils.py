@@ -35,7 +35,7 @@ class GdeltUtils:
     def decompress_zip_urls(self, urls, dest_dir) -> List[str]:
         files = []
         for url in urls:
-            files.append(self.decompress_zip_url(url, dest_dir))
+            files.extend(self.decompress_zip_url(url, dest_dir))
         return files
 
 
