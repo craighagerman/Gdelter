@@ -16,12 +16,8 @@ class GIO:
 
     @staticmethod
     def resave_compressed(file):
-        # lines = (x for x in open(file, encoding='latin1'))
         gzfile = file + ".gz"
         print("\tsaving {}".format(gzfile))
-        # with gzip.open(gzfile, 'wt') as fo:
-        #     for line in lines:
-        #         fo.write(line)
 
         data = open(file, encoding='latin1').read()
         with gzip.open(gzfile, 'wt') as fo:
@@ -63,5 +59,3 @@ class GIO:
         GDELT_YMD_FORMAT = '%Y%m%d'
         datetime_obj= datetime.strptime(ymd, GDELT_YMD_FORMAT )
         return os.path.join(basedir, datetime_obj.strftime("%Y"), datetime_obj.strftime("%m"), ymd)
-
-

@@ -42,8 +42,6 @@ class MasterList:
         self.logger = logging.getLogger('Masterlist')
 
 
-
-
     def load_masterlist(self, local=False) -> Dict[str, str]:
         ''' load (event, gkg) masterlist from url or local file.
             Return list of urls
@@ -62,6 +60,8 @@ class MasterList:
         date2extract_dict = self._create_date_extract_url_dict(masterlist_urls)
         return date2extract_dict
 
+
+    ###################################################################################################################
 
 
     def _get_extracts_for_date(self, date2extract_dict, ymd):
@@ -90,12 +90,6 @@ class MasterList:
         return [x for x in extract_urls if "mentions" not in x]
 
 
-
-
-
-
-
-
     def _create_date_extract_url_dict(self, masterlist_urls):
         '''
             Return dict of {date -> [event_urls, mention_urls, gkg_urls]}
@@ -107,9 +101,6 @@ class MasterList:
             date = GUtils.ymd_from_gdelt_date(gdelt_date)
             date2extract_dict[ date ].append(url)
         return date2extract_dict
-
-
-
 
 
     def _get_masterlist_from_url(self, masterlist_url) -> List[str]:
@@ -138,18 +129,7 @@ class MasterList:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+    ###################################################################################################################
 
 
 
@@ -172,10 +152,6 @@ def main(online, masterlist_dir, masterlist_filename, date):
         gm.run(date, True)
 
     print("\tend time:\t{}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-
-
-
-
 
 
 

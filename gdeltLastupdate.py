@@ -34,4 +34,3 @@ class LastUpdate:
     def get_lastupdate_dict(self, urls):
         return {u.split(".")[-3]: u.strip() for u in tqdm(urls)}
 
-

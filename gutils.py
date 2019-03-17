@@ -1,14 +1,5 @@
-
-import io
 import logging
 import os
-import re
-import zipfile
-from typing import List
-
-import requests
-
-from gdeltIO import GIO
 
 
 class GUtils:
