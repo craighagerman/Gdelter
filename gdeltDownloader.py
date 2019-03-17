@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import threading
 from collections import Counter
 from datetime import datetime
 from threading import Thread
@@ -23,10 +24,23 @@ Call the start() method to kick off subclass-ed run()
 
 n.b. see:
 https://stackoverflow.com/questions/21492424/python-multithreading-for-downloads
+
+TODO : we need a Producer/Consumer pattern to avoid creating too many threads at once
+    n.b. This uses up too many resources and may also hit the same sites too often for politeness 
+    n.b. keep in mind that creating and destroying threads is expensive
+    check out Queue class
+    see: https://stackoverflow.com/questions/19369724/the-right-way-to-limit-maximum-number-of-threads-running-at-once
+
+    Use a semaphore as a temporary fix
+
 '''
 
+# define an upper limit on the maximum value of threads. i.e. max number of concurrent downloads
+maximumNumberOfThreads = 20
+threadLimiter = threading.BoundedSemaphore(maximumNumberOfThreads)
 
-class Downloader(Thread):
+
+class Downloader(threading.Thread):
 
     def __init__(self, url, eid, gid, metadata_dict, filename,
                  article_dir,
@@ -57,8 +71,35 @@ class Downloader(Thread):
 
     ####################################################################################################################
 
-    #  override the run() function of Thread class to start the thread.
     def run(self):
+        threadLimiter.acquire()
+        try:
+            self.executeDownload()
+        finally:
+            threadLimiter.release()
+
+    # #  override the run() function of Thread class to start the thread.
+    # def run(self):
+    #     self.logger.info("Downloading {}".format(self.url))
+    #     status, html = self._get_web_page(self.url)
+    #     content = self._get_content(html) if status == 200 else ""
+    #     file_size_bytes = len(html)
+    #
+    #     meta = self._extract_meta(html)
+    #
+    #     page_links, domain_counts = self._extract_all_links(html)
+    #     self._save_links(page_links, self.page_link_dir, self.filename)
+    #     self._save_dict(meta, self.metadata_dict_dir, self.filename)
+    #     self._save_dict(domain_counts, self.domain_dir, self.filename)
+    #     self.save_html_content(content, self.filename, False)
+    #
+    #     title, site_name = self._parse_metadata(html)
+    #     metadata = [self.url, self._get_domain(self.url), file_size_bytes, self.eid, self.gid, status, self.ymd, title, site_name]
+    #     self.metadata_dict[self.url] = metadata
+
+
+
+    def executeDownload(self):
         self.logger.info("Downloading {}".format(self.url))
         status, html = self._get_web_page(self.url)
         content = self._get_content(html) if status == 200 else ""
@@ -67,14 +108,17 @@ class Downloader(Thread):
         meta = self._extract_meta(html)
 
         page_links, domain_counts = self._extract_all_links(html)
-        self._save_links(page_links, self.page_link_dir, self.filename)
-        self._save_dict(meta, self.metadata_dict_dir, self.filename)
-        self._save_dict(domain_counts, self.domain_dir, self.filename)
+        self._save_links(page_links, self.page_link_dir, self.filename, "page_links")
+        self._save_dict(meta, self.metadata_dict_dir, self.filename, "html_meta")
+        self._save_dict(domain_counts, self.domain_dir, self.filename, "page_domains")
         self.save_html_content(content, self.filename, False)
 
         title, site_name = self._parse_metadata(html)
-        metadata = [self.url, self._get_domain(self.url), file_size_bytes, self.eid, self.gid, status, self.ymd, title, site_name]
+        metadata = [self.url, self._get_domain(self.url), file_size_bytes, self.eid, self.gid, status, self.ymd, title,
+                    site_name]
         self.metadata_dict[self.url] = metadata
+
+
 
 
 
@@ -162,16 +206,16 @@ class Downloader(Thread):
                 fo.write(content)
 
 
-    def _save_links(self, links, dir, filename):
+    def _save_links(self, links, dir, filename, filekind):
         ''' save a list of URLS as a gzipped text file'''
-        file = self._build_filepath(dir, filename, "txt")
+        file = self._build_filepath(dir, "{}_{}".format(filename, filekind), "txt")
         with gzip.open("{}.gz".format(file), "wt") as fo:
             fo.write("\n".join(links))
 
 
-    def _save_dict(self, d, dir, filename):
+    def _save_dict(self, d, dir, filename, filekind):
         ''' save a dict to dir/filename as a gzipped json file'''
-        file = self._build_filepath(dir, filename, "json")
+        file = self._build_filepath(dir, "{}_{}".format(filename, filekind), "json")
         with gzip.open("{}.gz".format(file), "wt") as fo:
             json.dump(d, fo, indent=4)
 

@@ -1,15 +1,18 @@
 
 import logging
 import os
+import threading
 from collections import defaultdict
 from datetime import datetime
-from typing import List
+from itertools import chain
+from typing import List, Dict
 
 import click
 import requests
 
 from gdeltIO import GIO
-from gdeltutils import GdeltUtils
+from gutils import GUtils
+import gdeltParameters
 
 '''
 
@@ -21,9 +24,13 @@ masterlist_filename = "masterfilelist.txt"
 
 gm = MasterList(masterlist_dir, masterlist_filename, masterlist_url )
 
+
 '''
 
+
+
 class MasterList:
+
     def __init__(self, url = None, localfile = None, basedir ="./"):
         self.masterlist_dir = os.path.join(basedir, "masterlist")
         # self.masterlist_file = localfile if localfile else os.path.join(self.masterlist_dir, "masterlist.txt")
@@ -36,13 +43,14 @@ class MasterList:
 
 
 
-    def load_masterlist(self, local=False):
+
+    def load_masterlist(self, local=False) -> Dict[str, str]:
         ''' load (event, gkg) masterlist from url or local file.
-            Return dict of {date -> [event_urls, mention_urls, gkg_urls]}
+            Return list of urls
         '''
         masterlist_source = self.masterlist_file if local else self.masterlist_url
-        masterlist_links = defaultdict(list)
 
+        # load masterlist file from local or online
         if local:
             masterlist_urls = self._get_masterlist_from_file(masterlist_source)
         else:
@@ -51,27 +59,57 @@ class MasterList:
             GIO.save_masterlist_urls(masterlist_urls, self.masterlist_file)
 
         # create a dictionary of {YMD -> [all_event/mention/gkg_urls]}
+        date2extract_dict = self._create_date_extract_url_dict(masterlist_urls)
+        return date2extract_dict
+
+
+
+    def _get_extracts_for_date(self, date2extract_dict, ymd):
+        #  http://data.gdeltproject.org/gdeltv2/20150218230000.export.CSV.zip
+        # 'http://data.gdeltproject.org/gdeltv2/20190201010000.export.CSV.zip'
+        def make_url(ymd, hms, kind):
+            head = "http://data.gdeltproject.org/gdeltv2"
+            if kind == "export":
+                tail = ".{}.CSV.zip".format(kind)
+            elif kind == "gkg":
+                tail = ".{}.csv.zip".format(kind)
+            return os.path.join(head, "{}{}{}".format(ymd, hms, tail))
+
+        if ymd in date2extract_dict:
+            self.logger.info("filtering masterlist file for for YMD date {} ...".format(ymd))
+            extract_urls = date2extract_dict[ymd]
+            # TODO : check if `if os.path.basename(url).startswith(ymd)` is needed here:
+            extract_urls = [url for url in extract_urls if os.path.basename(url).startswith(ymd)]
+        else:
+            self.logger.info("creating url lists for for YMD date {} ...".format(ymd))
+            event_extracts = map(lambda x: make_url(ymd, x, "export"),  gdeltParameters.hms)
+            gkg_extracts = map(lambda x: make_url(ymd, x, "gkg"), gdeltParameters.hms)
+            # extract_urls = chain(event_extracts, gkg_extracts)
+            extract_urls = list(event_extracts) + list(gkg_extracts)
+            # filter out 'mentions' files
+        return [x for x in extract_urls if "mentions" not in x]
+
+
+
+
+
+
+
+
+    def _create_date_extract_url_dict(self, masterlist_urls):
+        '''
+            Return dict of {date -> [event_urls, mention_urls, gkg_urls]}
+        '''
+        # create a dictionary of {YMD -> [all_event/mention/gkg_urls]}
+        date2extract_dict = defaultdict(list)
         for url in masterlist_urls:
             gdelt_date = os.path.basename(url).split(".")[0]
-            date = GdeltUtils.ymd_from_gdelt_date(gdelt_date)
-            masterlist_links[ date ].append(url)
-        return masterlist_links
+            date = GUtils.ymd_from_gdelt_date(gdelt_date)
+            date2extract_dict[ date ].append(url)
+        return date2extract_dict
 
 
 
-    def filter_date2extract_dict(self, date2extract_dict, date):
-        ''' Return a list of urls '''
-        if not isinstance(date2extract_dict, dict) :
-            raise Exception("date2extract_dict")
-        if not (isinstance(date, str) or (len(date) == 8) or (date.startswith("20"))):
-            raise Exception("date is not a valid string like `20190321`")
-        if not date in date2extract_dict:
-            self.logger.error("YMD date {} is not in masterlist_links".format(date))
-            return None
-        else:
-            self.logger.info("filtering masterlist for YMD date {} ...".format(date))
-            extract_urls = date2extract_dict[date]
-            return (url for url in extract_urls if os.path.basename(url).startswith(date))
 
 
     def _get_masterlist_from_url(self, masterlist_url) -> List[str]:
@@ -97,6 +135,12 @@ class MasterList:
         print("_get_masterlist_from_file()  {}...".format(masterlist_file))
         lines = (x.strip().split() for x in open(masterlist_file))
         return [x[-1] for x in lines]
+
+
+
+
+
+
 
 
 
