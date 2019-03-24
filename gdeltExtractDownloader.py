@@ -17,6 +17,8 @@ maximumNumberOfThreads = 5
 
 class ExtractDownloader:
     def __init__(self):
+        # self.dest_dir = dest_dir
+        self.dest_dir = ""
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('Downloader')
 
@@ -25,21 +27,24 @@ class ExtractDownloader:
         """
         Create a thread pool and download specified urls
         """
-        self.logger.info("Downloading {} extract files and resaving as gzipped files to :".format(len(urls), dest_dir))
-        with ThreadPoolExecutor(max_workers=maximumNumberOfThreads) as executor:
-            file_list = list(executor.map(self.execute_extract_download, urls, repeat(dest_dir), timeout=60))
+        self.dest_dir = dest_dir
+        self.logger.info("Downloading {} extract files and resaving as gzipped files to : {}".format(len(urls), self.dest_dir))
+        # TODO : move dest_dir into map function as repeat(dest_dir)
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            # file_list = list(executor.map(self.execute_extract_download, urls, timeout=600))
+            file_list = list(executor.map(self.execute_extract_download, urls))
         return GUtils.flatten(file_list)
 
 
-    def execute_extract_download(self, url, dest_dir):
+    def execute_extract_download(self, url):
         self.logger.info("Downloading {}".format(url))
         file_basename = os.path.basename(url)
 
-        if self._extract_file_exists(dest_dir, file_basename):
-            self.logger.info("path {}/.gz  => exists".format(os.path.join(dest_dir, file_basename)))
+        if self._extract_file_exists(self.dest_dir, file_basename):
+            self.logger.info("path {}/.gz  => exists".format(os.path.join(self.dest_dir, file_basename)))
             gzfiles = []
         else:
-            files = self.decompress_zip_url(url, dest_dir)
+            files = self.decompress_zip_url(url, self.dest_dir)
             gzfiles = GIO.resave_compressed_files(files)
         return gzfiles
 

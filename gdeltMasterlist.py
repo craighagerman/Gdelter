@@ -31,10 +31,8 @@ gm = MasterList(masterlist_dir, masterlist_filename, masterlist_url )
 
 class MasterList:
 
-    def __init__(self, url = None, localfile = None, basedir ="./"):
-        self.masterlist_dir = os.path.join(basedir, "masterlist")
-        # self.masterlist_file = localfile if localfile else os.path.join(self.masterlist_dir, "masterlist.txt")
-        self.masterlist_file = os.path.join(self.masterlist_dir, localfile)
+    def __init__(self, url, masterlist_file):
+        self.masterlist_file = masterlist_file
         self.masterlist_url = url
 
         # create logger with 'spam_application'
@@ -63,8 +61,8 @@ class MasterList:
 
     ###################################################################################################################
 
-
-    def _get_extracts_for_date(self, date2extract_dict, ymd):
+    # WIP ------------------------------------------------------------------------------------------
+    def get_extracts_for_date(self, date2extract_dict, ymd):
         #  http://data.gdeltproject.org/gdeltv2/20150218230000.export.CSV.zip
         # 'http://data.gdeltproject.org/gdeltv2/20190201010000.export.CSV.zip'
         def make_url(ymd, hms, kind):
@@ -107,7 +105,8 @@ class MasterList:
         ''' Return a list of lines from masterlist file loaded from url'''
         if not (isinstance(masterlist_url, str) and (masterlist_url.startswith("http"))):
             raise Exception("masterlist_url is not a valid URL")
-        self.logger.innfo("_getting masterlist from url {} ...".format(masterlist_url))
+        self.logger.info("_getting masterlist from url {} ...".format(masterlist_url))
+        urls = []
         try:
             r = requests.get(masterlist_url)
             status= r.status_code
@@ -115,8 +114,9 @@ class MasterList:
             status = -1
             self.logger.error("Timeout exception for url: {}".format(masterlist_url))
         if status == 200:
-            return r.text.split("\n")
-        return []
+            lines = r.text.split("\n")
+            urls = (line.split()[-1] for line in lines if line.strip())
+        return urls
 
 
     def _get_masterlist_from_file(self, masterlist_file) -> List[str]:

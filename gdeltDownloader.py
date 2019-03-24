@@ -1,22 +1,19 @@
-import gzip
-import json
 import logging
 import os
-import re
 import threading
-from collections import Counter
-from datetime import datetime
-from threading import Thread
+from collections import Counter, defaultdict
+from concurrent.futures.thread import ThreadPoolExecutor
+from itertools import repeat
 from typing import *
 from urllib.parse import urlparse
 
 import dragnet
 import metadata_parser
 import requests
-
-
-
 from bs4 import BeautifulSoup
+
+from gdeltIO import GIO
+from gutils import GUtils
 
 '''
 create a class that represents a separate thread for each download. 
@@ -40,86 +37,88 @@ maximumNumberOfThreads = 20
 threadLimiter = threading.BoundedSemaphore(maximumNumberOfThreads)
 
 
-class Downloader(threading.Thread):
-
-    def __init__(self, url, eid, gid, metadata_dict, filename,
-                 article_dir,
-                 status_dir,
-                 metadata_dict_dir,
-                 page_link_dir,
-                 domain_dir,
-                 ymd=datetime.now().strftime("%Y-%m-%d")
-                 ):
-        super().__init__()
-        self.url = url
-        self.eid = eid
-        self.gid = gid
-        self.metadata_dict : Dict[List] = metadata_dict
-
-        self.filename = filename
-        self.article_dir = article_dir
-        self.ymd = ymd
+class ArticleDownloader():
+    def __init__(self, basedir, status_dir, ymd):
+        self.basedir = basedir
         self.status_dir = status_dir
+        self.ymd = ymd
+        self.metadata_dict = defaultdict(list)
 
-        self.metadata_dict_dir = metadata_dict_dir
-        self.page_link_dir = page_link_dir
-        self.domain_dir = domain_dir
+        print("ArticleDownloader")
+        print("\tymd:        {}".format(self.ymd))
+        print("\tbasedir:    {}".format(self.basedir))
+        print("\tstatus_dir: {}".format(self.status_dir))
+        print("\tpage domain dir: {}".format(GIO.define_page_domain_dir(self.basedir, self.ymd)))
+        print("\thtml meta dir:   {}".format(GIO.define_html_meta_dir(self.basedir, self.ymd)))
+        print("\tlinks dir:       {}".format(GIO.define_page_links_dir(self.basedir, self.ymd)))
+        print("-"*80)
 
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('Downloader')
 
 
-    ####################################################################################################################
+    def download_articles(self, url_ids):
+        """
+        Create a thread pool and download specified urls
+        """
+        self.logger.info("Downloading {} articles and resaving as gzipped files to : {}".format(len(url_ids), self.basedir))
+        with ThreadPoolExecutor(max_workers=maximumNumberOfThreads) as executor:
+            article_results = list(executor.map(self.execute_article_download, url_ids))
 
-    def run(self):
-        threadLimiter.acquire()
-        try:
-            self.executeDownload()
-        finally:
-            threadLimiter.release()
+        # save stats collected in a global dict by `execute_article_download` method
+        GIO.save_article_stats(self.metadata_dict, GIO.define_stat_dir(self.basedir, self.ymd), self.ymd)
 
-    # #  override the run() function of Thread class to start the thread.
-    # def run(self):
-    #     self.logger.info("Downloading {}".format(self.url))
-    #     status, html = self._get_web_page(self.url)
-    #     content = self._get_content(html) if status == 200 else ""
-    #     file_size_bytes = len(html)
-    #
-    #     meta = self._extract_meta(html)
-    #
-    #     page_links, domain_counts = self._extract_all_links(html)
-    #     self._save_links(page_links, self.page_link_dir, self.filename)
-    #     self._save_dict(meta, self.metadata_dict_dir, self.filename)
-    #     self._save_dict(domain_counts, self.domain_dir, self.filename)
-    #     self.save_html_content(content, self.filename, False)
-    #
-    #     title, site_name = self._parse_metadata(html)
-    #     metadata = [self.url, self._get_domain(self.url), file_size_bytes, self.eid, self.gid, status, self.ymd, title, site_name]
-    #     self.metadata_dict[self.url] = metadata
+        num_downloads = [x[0] for x in article_results]
+        total_bytes = sum([x[1] for x in article_results])
+
+        print("\t>>> downloaded {} of {} urls".format(sum(num_downloads), len(num_downloads)))
+        return sum(num_downloads), len(num_downloads), total_bytes
 
 
+    def execute_article_download(self, url_id):
+        url, eid, gid = url_id
+        filename = eid if eid else "g_{}".format(gid)
+        file_basename = os.path.basename(url)
+        success = 0
+        file_size_bytes = 0
 
-    def executeDownload(self):
-        self.logger.info("Downloading {}".format(self.url))
-        status, html = self._get_web_page(self.url)
-        content = self._get_content(html) if status == 200 else ""
-        file_size_bytes = len(html)
+        if self.article_exists(filename):
+            self.logger.info("path {}/.gz  => exists".format(os.path.join(self.basedir, file_basename)))
+        else:
+            status, html = self._get_web_page(url)
+            if status == 200:
+                content = self._get_content(html)
+                file_size_bytes = len(html)
+                self.logger.info("Downloading {} bytes from {}".format(file_size_bytes, url))
 
-        meta = self._extract_meta(html)
+                meta = self._extract_meta(html)
+                page_links, domain_counts = self._extract_all_links(html)
 
-        page_links, domain_counts = self._extract_all_links(html)
-        self._save_links(page_links, self.page_link_dir, self.filename, "page_links")
-        self._save_dict(meta, self.metadata_dict_dir, self.filename, "html_meta")
-        self._save_dict(domain_counts, self.domain_dir, self.filename, "page_domains")
-        self.save_html_content(content, self.filename, False)
+                # save list of links found on page to csv file
+                GIO.save_links(page_links, GIO.define_page_links_dir(self.basedir, self.ymd), filename)
+                # save html meta as json file
+                GIO.save_dict(meta, GIO.define_html_meta_dir(self.basedir, self.ymd), filename)
+                # save list of domains found on page to csv file
+                GIO.save_dict(meta, GIO.define_page_domain_dir(self.basedir, self.ymd), filename)
+                # save content (body text) to txt file
+                GIO.save_html_content(content, self.basedir, self.ymd, filename, False)
 
-        title, site_name = self._parse_metadata(html)
-        metadata = [self.url, self._get_domain(self.url), file_size_bytes, self.eid, self.gid, status, self.ymd, title,
-                    site_name]
-        self.metadata_dict[self.url] = metadata
+                title, author, site_name, keywords, description = self._parse_metadata(html)
+                metadata = [url, self._get_domain(url), file_size_bytes, eid, gid, status, self.ymd, title,
+                            site_name, author, keywords, description]
+                self.metadata_dict[url] = metadata
+                success = 1
+            else:
+                self.logger.info("status = {} for url: {} ".format(status, url))
+        return success, file_size_bytes
 
 
-
+    def article_exists(self, filename):
+        html_file = GIO.html_content_filepath(self.basedir, self.ymd, filename, True)
+        content_file = GIO.html_content_filepath(self.basedir, self.ymd, filename)
+        if os.path.exists(html_file) or os.path.exists(content_file) or os.path.exists(html_file + ".gz") or os.path.exists(content_file + ".gz"):
+            return True
+        return False
 
 
     # -----------------------------------------------------------------------------------------------------------------
@@ -134,8 +133,8 @@ class Downloader(threading.Thread):
             html = text.replace(u'\xa0', u' ') if status_code == 200 else ""
             return status_code, html
         except requests.exceptions.RequestException as e:
-            print("RequestException exception for url: {}".format(url))
-            print(e)
+            self.logger.warning("ERROR: RequestException exception for url: {}".format(url))
+            # self.logger.error(e)
             return -1, ""
 
 
@@ -153,30 +152,11 @@ class Downloader(threading.Thread):
     # -----------------------------------------------------------------------------------------------------------------
     #   Content parsing methods
     # -----------------------------------------------------------------------------------------------------------------
-    def _parse_metadata(self, HTML_str):
-        page = metadata_parser.MetadataParser(html=HTML_str)
-        metadata = {x: page.metadata[x] for x in page.metadata if
-                    page.metadata[x] and isinstance(page.metadata[x], dict)}
-        title = page.get_metadatas('title')
-        # author = page.get_metadatas('author')
-        site_name = page.get_metadatas('site_name')
-        # description = page.get_metadatas('description')
-        # keywords = page.get_metadatas('news_keywords')
-        metas = [title, site_name]
-        return [self._clean_metadata(x[0]) if isinstance(x, list) else "" for x in metas]
-
-
     def _extract_meta(self, html_content: str) :
         page = metadata_parser.MetadataParser(html=html_content)
         metadata: Dict = {x: page.metadata[x] for x in page.metadata if
                     page.metadata[x] and isinstance(page.metadata[x], dict)}
         return metadata
-
-
-    def _get_domain(self, url: str) -> str:
-        ''' Return the base domain of a ULR (e.g. `http://www.cnn.com` )'''
-        parsed_url = urlparse(url)
-        return '{uri.scheme}://{uri.netloc}/'.format(uri=parsed_url)
 
 
     def _extract_all_links(self, html_content: str):
@@ -192,65 +172,22 @@ class Downloader(threading.Thread):
         return links, c
 
 
-    # -----------------------------------------------------------------------------------------------------------------
-    #   Save file methods
-    # -----------------------------------------------------------------------------------------------------------------
-    def save_html_content(self, content, filename, raw=False, compress=True):
-        file = self.html_content_filepath(self.article_dir, self.ymd, filename,  raw)
-        if compress:
-            # write content as gzip-ed text
-            with gzip.open("{}.gz".format(file), "wt") as fo:
-                fo.write(content)
-        else:
-            with open(file, "wt") as fo:
-                fo.write(content)
+    def _parse_metadata(self, HTML_str):
+        page = metadata_parser.MetadataParser(html=HTML_str)
+        # TODO : deleteme?
+        # metadata = {x: page.metadata[x] for x in page.metadata if
+        #             page.metadata[x] and isinstance(page.metadata[x], dict)}
+        title = page.get_metadatas('title')
+        author = page.get_metadatas('author')
+        site_name = page.get_metadatas('site_name')
+        description = page.get_metadatas('description')
+        keywords = page.get_metadatas('news_keywords')
+        metas = [title, author, site_name, keywords, description]
+        return [GUtils.clean_text(x[0]) if isinstance(x, list) else "" for x in metas]
 
 
-    def _save_links(self, links, dir, filename, filekind):
-        ''' save a list of URLS as a gzipped text file'''
-        file = self._build_filepath(dir, "{}_{}".format(filename, filekind), "txt")
-        with gzip.open("{}.gz".format(file), "wt") as fo:
-            fo.write("\n".join(links))
-
-
-    def _save_dict(self, d, dir, filename, filekind):
-        ''' save a dict to dir/filename as a gzipped json file'''
-        file = self._build_filepath(dir, "{}_{}".format(filename, filekind), "json")
-        with gzip.open("{}.gz".format(file), "wt") as fo:
-            json.dump(d, fo, indent=4)
-
-
-    # -----------------------------------------------------------------------------------------------------------------
-    #   Path define methods
-    # -----------------------------------------------------------------------------------------------------------------
-    def html_content_filepath(self, article_dir, ymd, filename, raw=False):
-        '''
-        Define an absolute path to which to save HTML (raw or content)
-        :param filename:    name of the file
-        :param article_dir: article directory
-        :param ymd:         Year-Month-Date
-        :param raw:         Boolean flag for whether or not to specify 'raw' article directory
-        :return:            a path to which to save HTML content
-        '''
-        if raw:
-            path = os.path.join("{}_raw".format(article_dir), "{}".format(ymd), "{}.html".format(filename))
-        else:
-            path = os.path.join(article_dir, "{}".format(ymd), "{}.text".format(filename))
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        return path
-
-
-    def _build_filepath(self, dir, filename, extension = "text"):
-        ''' create a full path to a file by joining dir, ymd and filename'''
-        path = os.path.join(dir, "{}".format(self.ymd), "{}.{}".format(filename, extension))
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        return path
-
-
-    # -----------------------------------------------------------------------------------------------------------------
-    #   Text processing methods
-    # -----------------------------------------------------------------------------------------------------------------
-    def _clean_metadata(self, s: str) -> str:
-        ''' Replace tabs, newlines with spaces '''
-        return re.sub("[\n\r\t]", " ", str(s))
+    def _get_domain(self, url: str) -> str:
+        ''' Return the base domain of a ULR (e.g. `http://www.cnn.com` )'''
+        parsed_url = urlparse(url)
+        return '{uri.scheme}://{uri.netloc}/'.format(uri=parsed_url)
 
