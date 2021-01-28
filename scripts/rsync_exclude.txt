@@ -1,7 +1,15 @@
 build/
 *.pyc
 Data/*
+Data_sample/*
 *text
 *html
 *csv
 *zip
+*.git
+*.idea
+.DS_Store
+Not_Used/*
+__pycache__
+.pyre
+Docs

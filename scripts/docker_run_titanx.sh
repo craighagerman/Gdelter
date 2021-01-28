@@ -1,10 +1,15 @@
 #!/bin/bash
 
 
-#docker run --name=python-gdelt -d -v /home/chagerman/Projects/NewsAggregator/Gdelter/Data:/Gdelter/Data python-gdelt
+# CMD version
+#
+# docker run -v /home/chagerman/Data/Gdelt_Data:/Gdelt_Data cloud.canister.io:5000/chagerman/py-gdelt:0.1.2e
 
 
-docker run -v /home/chagerman/Gdelt_Data:/Gdelt_Data python-gdelt
+# EXEC version
+# ------------
+docker run -v /home/chagerman/Data/Gdelt_Data:/Gdelt_Data cloud.canister.io:5000/chagerman/py-gdelt:0.1.3 -o -d /Gdelt_Data -k lastupdate
+
 
 # docker stop --time=30 python-gdelt
 

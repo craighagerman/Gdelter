@@ -22,4 +22,4 @@ RUN pip install tqdm
 
 
 
-CMD [ "python", "/Gdelter/Gdelter.py", "-o", "-d", "/Gdelt_Data", "-k", "lastupdate"]
+CMD [ "python", "/Gdelter/Gdelter.py", ]

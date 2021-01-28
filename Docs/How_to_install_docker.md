@@ -30,7 +30,6 @@ Install from the Docker repo
  
     apt-cache policy docker-ce
 
-
 Install Docker
 
     sudo apt install docker-ce

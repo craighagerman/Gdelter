@@ -19,5 +19,6 @@ def timeit(method):
     return timed
 
 
-
+def good(method):
+    print("stable, working version of method: {} ".format(method.__name__))
 
