@@ -1,4 +1,5 @@
 import io
+import coloredlogs
 import logging
 import os
 import re
@@ -16,11 +17,14 @@ maximumNumberOfThreads = 5
 
 
 class ExtractDownloader:
-    def __init__(self):
+    def __init__(self, max_workers=4):
         # self.dest_dir = dest_dir
         self.dest_dir = ""
+        self.workers = max_workers
+        coloredlogs.install()
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('Downloader')
+        self.logger.info("\tmax_workers: {}".format(self.workers))
 
 
     def download_extracts(self, urls, dest_dir):
@@ -30,7 +34,7 @@ class ExtractDownloader:
         self.dest_dir = dest_dir
         self.logger.info("Downloading {} extract files and resaving as gzipped files to : {}".format(len(urls), self.dest_dir))
         # TODO : move dest_dir into map function as repeat(dest_dir)
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=self.workers) as executor:
             # file_list = list(executor.map(self.execute_extract_download, urls, timeout=600))
             file_list = list(executor.map(self.execute_extract_download, urls))
         return GUtils.flatten(file_list)
@@ -40,13 +44,14 @@ class ExtractDownloader:
         self.logger.info("Downloading {}".format(url))
         file_basename = os.path.basename(url)
 
+        filelist = []
         if self._extract_file_exists(self.dest_dir, file_basename):
             self.logger.info("path {}/.gz  => exists".format(os.path.join(self.dest_dir, file_basename)))
-            gzfiles = []
         else:
             files = self.decompress_zip_url(url, self.dest_dir)
             gzfiles = GIO.resave_compressed_files(files)
-        return gzfiles
+            filelist = gzfiles
+        return filelist
 
 
     ###################################################################################################################
@@ -74,7 +79,9 @@ class ExtractDownloader:
                 '/Users/chagerman/Projects/2019_News/Data/tmp_out/events/20190311/20190311214500.export.CSV'
         '''
         z = self._download_zipfile(url)
-        files = self._extract_zipfile(z, dest_dir)
+        files = []
+        if z:
+            files = self._extract_zipfile(z, dest_dir)
         # n.b. export and gkg zip files seem to only contain one file.
         return files
 
@@ -84,8 +91,15 @@ class ExtractDownloader:
         :param url:       url of the zipfile to download
         :return:    a ZipFile object
         '''
+        z = None
         r = requests.get(url, timeout=25)
-        z = zipfile.ZipFile(io.BytesIO(r.content))
+        if r.status_code == 404:
+            return z
+        try:
+            z = zipfile.ZipFile(io.BytesIO(r.content))
+        except zipfile.BadZipFile as e:
+            self.logger.error("***\tBadZipFile for url: {}".format(url))
+            self.logger.error(e)
         return z  # type: zipfile.ZipFile
 
 

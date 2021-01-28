@@ -2,8 +2,19 @@
 .DS_Store
 .idea/
 Data/*
+Not_Used*
 
 *.md
+
+How_to_dockerize_a_Python_application.md
+Dockerfile_example
+crontab_setup.md
+Canister_docker_repo_howto.md
+Data_sample/*
+article_stats/*
+Not_Used/*
+scripts/*
+Docs/*
 
     
 # Byte-compiled / optimized / DLL files
@@ -79,3 +90,5 @@ venv.bak/
 
 # Pyre type checker
 .pyre/
+
+

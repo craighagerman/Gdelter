@@ -1,0 +1,14 @@
+
+
+Docker
+
+LastUpdate
+
+
+# macbook
+docker run -v /Users/chagerman/Projects/NewsAggregator/Data/Gdelt_Data:/Gdelt_Data   cloud.canister.io:5000/chagerman/py-gdelt:0.1.4a  -o -d /Gdelt_Data -k lastupdate
+docker run -v /Users/chagerman/Projects/NewsAggregator/Data/Gdelt_Data:/Gdelt_Data   py-gdelt:0.1.4a  -o -d /Gdelt_Data -k lastupdate
+
+Backfill
+docker run -v /home/chagerman/Data/Gdelt_Data:/Gdelt_Data   cloud.canister.io:5000/chagerman/py-gdelt:0.1.4b  -o -d /Gdelt_Data -k lastupdate -k backfill -y 20190320
+

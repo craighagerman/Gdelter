@@ -1,4 +1,6 @@
 
+from collections import namedtuple
+
 # class GdeltParameters:
 
 
@@ -26,13 +28,21 @@ gkg_columns = ["GKGRECORDID", "DATE", "SourceCollectionIdentifier", "SourceCommo
            "SocialImageEmbeds", "SocialVideoEmbeds", "Quotations", "AllNames", "Amounts", "TranslationInfo",
            "Extras"]
 
-
 event_id_url_columns = ['GLOBALEVENTID', 'SOURCEURL']
 gkg_id_url_columns = ['GKGRECORDID', 'DocumentIdentifier']
 
 # define header names for url_metadata so that it can be (1) convereted to a Pandas Dataframe and saved to CSV
-metadata_columns = ['url', 'domain', 'nbytes', 'eventid', 'gkgid', 'status', 'accessdate', 'title', 'site_name', 'author', 'keywords', 'description']
-
+article_stats_columns = ['url', 'domain', 'nbytes', 'eventid', 'gkgid', 'status', 'accessdate', 'title', 'site_name', 'author', 'keywords', 'description']
 
 # define the hour-minute-seconds in valid extract file urls
 hms = ["000000", "001500", "003000", "004500", "010000", "011500", "013000", "014500", "020000", "021500", "023000", "024500", "030000", "031500", "033000", "034500", "040000", "041500", "043000", "044500", "050000", "051500", "053000", "054500", "060000", "061500", "063000", "064500", "070000", "071500", "073000", "074500", "080000", "081500", "083000", "084500", "090000", "091500", "093000", "094500", "100000", "101500", "103000", "104500", "110000", "111500", "113000", "114500", "120000", "121500", "123000", "124500", "130000", "131500", "133000", "134500", "140000", "141500", "143000", "144500", "150000", "151500", "153000", "154500", "160000", "161500", "163000", "164500", "170000", "171500", "173000", "174500", "180000", "181500", "183000", "184500", "190000", "191500", "193000", "194500", "200000", "201500", "203000", "204500", "210000", "211500", "213000", "214500", "220000", "221500", "223000", "224500", "230000", "231500", "233000", "234500",]
+
+########################################################################################################################
+
+
+# Metadata = namedtuple('Metadata', 'name age gender')
+Articlestats = namedtuple('Articlestats', article_stats_columns)
+
+
+
+

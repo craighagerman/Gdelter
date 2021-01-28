@@ -1,4 +1,5 @@
 #!/home/chagerman/.pyenv/shims/python
+import coloredlogs
 import logging
 import os
 import pprint
@@ -75,11 +76,12 @@ parse master file lists:
 
 class Gdelter:
 
-    def __init__(self, url=None, basedir="./", local = True):
+    def __init__(self, url=None, basedir="./", local = True, low_resource=False):
         self.url = url
         self.basedir = basedir
         self.masterlist_file = os.path.join(self.basedir, "masterlist", "masterfilelist.txt")
         self.local = local
+        self.low_resource = low_resource
 
         # define output directory paths
         self.article_dir = os.path.join(self.basedir, "articles")
@@ -107,6 +109,7 @@ class Gdelter:
         self.masterlist_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
 
         # create logger with 'spam_application'
+        coloredlogs.install()
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('Gdelter')
         self.logger.setLevel(logging.INFO)
@@ -130,7 +133,7 @@ class Gdelter:
         self.logger.info("running process_last_update() ...")
         start_time = time.time()
         self.logger.info("Getting lastupdate urls ... ")
-        extract_urls : List[str]= self._get_lastupdate()
+        extract_urls : List[str] = self._get_lastupdate()
 
         self.ymd, self.gdelt_ymd = self._get_gdelt_date(extract_urls)
         self.logger.info("GDELT Year-Month-Date: {}".format(self.ymd))
@@ -153,8 +156,10 @@ class Gdelter:
         end_time = time.time()
         duration = int((end_time - start_time) / 60)
         self.logger.info("-" * 50)
-        self.logger.info("finished processing {} news article urls in {} minutes".format(narticles_processed, duration))
+        msg = "timestamp: {}; finished processing {} news article urls in {} minutes".format(self.gdelt_ymd, narticles_processed, duration)
+        self.logger.info(msg)
         self.logger.info("-" * 50)
+        return msg
 
 
 
@@ -165,138 +170,47 @@ class Gdelter:
         start_time = time.time()
         self.ymd = date
 
-        # masterlist_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
-
-        gm = MasterList(self.masterlist_url, self.masterlist_file)
-
-        # get links from masterlist file - either downloaded from GDELT web page or local file
-
-        # date2extract_dict = gm.load_masterlist(local)
-        # extract_urls = gm.get_extracts_for_date(date2extract_dict, date)
-
-
-
-        # extract_dict = self._create_extract_dict_lists(extract_urls)
-        # events_files, gkg_files = self.load_extract_files(extract_dict)
-
         events_files, gkg_files = self.get_extracts(date)
-        print("number of events_files: {}   number of gkg_files : {}".format(len(events_files), len(gkg_files) ))
-        # exit(0)
-
+        self.logger.info("Retrieved {} event and {} gkg extract urls".format(len(events_files), len(gkg_files)))
 
         # finish
-        end_time = time.time()
-        duration = int((end_time - start_time) / 60)
+        duration = int((time.time() - start_time) / 60)
         self.logger.info("-" * 50)
-        self.logger.info("finished processing {} event and {} gkg urls in {} minutes".format(len(events_files), len(gkg_files),
-                                                                                    duration))
+        msg = "timestamp: {}; finished processing {} event and {} gkg urls in {} minutes".format(self.gdelt_ymd, len(events_files), len(gkg_files),duration)
+        self.logger.info(msg)
+        return msg
+
 
 
     # @timeit
     def backfill_articles(self, local, date):
         self.logger.info("running backfill_articlesx() ...")
         ''' For a given date, parse (local) event/gkg extract files for urls, download articles  '''
-        print("\nprocess_backfill_date()... {}\n".format(date))
         self._validate_date(date)
         self.ymd = date
         start_time = time.time()
 
         # events_files, gkg_files = self.get_local_event_gkg_extracts(date)
         events_files, gkg_files = self.get_extracts(date)
-
         self.logger.info("Retrieved {} event and {} gkg extract urls".format(len(events_files), len(gkg_files)))
 
-        print("events_files")
-        print("\n\t".join(events_files[:10]))
-        print("gkg_files")
-        print("\n\t".join(gkg_files[:10]))
-        # exit(0)
         narticles_processed = self.process_extract_files(events_files, gkg_files)
 
         # finish
         end_time = time.time()
         duration = int((end_time - start_time) / 60)
         self.logger.info("-" * 50)
-        self.logger.info("finished processing {} news article urls in {} minutes".format(narticles_processed, duration))
+        msg = "timestamp: {}; finished processing {} news article urls in {} minutes".format(self.gdelt_ymd, narticles_processed, duration)
+        self.logger.info(msg)
         self.logger.info("-" * 50)
+        return msg
 
 
+    # ==================================================================================================================
 
-
-
-
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-
-    ###################################################################################################################
-    #   Helper Methods
-    ###################################################################################################################
-
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-
-
-
-    def process_extract_files(self, events_files, gkg_files):
-        url_ids = self.get_article_urls_from_extracts(events_files, gkg_files)
-        # iterate through all urls, downloading articles & web page metadata, save results
-        self.logger.info("Downloading and saving articles & metadata from GDELT news articles ...")
-        self._download_and_save_articles(url_ids, self.ymd)
-        return len(url_ids)
-
-
-
-    def _download_and_save_articles(self, url_ids, ymd):
-        # download & save article; collect list of metadata about each
-        ad = ArticleDownloader(self.basedir, self.status_dir, ymd)
-        num_downloads, num_urls, total_bytes = ad.download_articles(url_ids)
-        self.logger.info("Successfully downloaded {} of {} urls. Total bytes: {}".format(num_downloads, num_urls, total_bytes))
-
-
-
-    def get_article_urls_from_extracts(self, events_files, gkg_files):
-        self.logger.info("processing event & gkg extract files...")
-        # parse Events & GKG files; create a master list of [url, event_id, gkg_id]
-        self.logger.info("Parsing event and gkg extract files ...")
-        event_id_urls = self._parse_gdelt_files(events_files, gdeltParameters.EventsKey)
-        gkg_id_urls = self._parse_gdelt_files(gkg_files, gdeltParameters.GkgKey)
-
-        # merge event and gkg urls from event_id_urls, gkg_id_urls lists
-        self.logger.info("creating a single list of article urls ...")
-        url_ids = self._create_event_gkg_url_dict(event_id_urls, gkg_id_urls)
-        return url_ids
-
-
-    # WIP ------------------------------------------------------------------------------------------
-    def get_local_event_gkg_extracts(self, date):
-        print("...get_local_event_gkg_extracts...")
-        events_dir = GIO.define_output_directory(self.basedir, gdeltParameters.EventsKey, date)
-        gkg_dir = GIO.define_output_directory(self.basedir, gdeltParameters.GkgKey, date)
-
-        print("events_dir : {}".format(events_dir))
-        print("gkg_dir :    {}".format(gkg_dir))
-
-        # events_ymd = os.path.join(self.events_basedir, date)
-        # gkg_ymd = os.path.join(self.gkg_basedir, date)
-        if os.path.exists(events_dir) and os.path.exists((gkg_dir)):
-            event_files = [os.path.join(events_dir, x) for x in os.listdir(events_dir)]
-            gkg_files = [os.path.join(gkg_dir, x) for x in os.listdir(gkg_dir)]
-            return event_files, gkg_files
-        return [], []
-
-
+    ####################################################################################################################
+    # Extract loading methods
+    ####################################################################################################################
     def load_extract_files(self, extract_dict):
         '''
         Return two lists (paths to local files) for event extracts and gkg extracts
@@ -304,7 +218,10 @@ class Gdelter:
         :return:
         '''
         # TODO : check if extract file exists; if so, load local and continue
-        ed = ExtractDownloader()
+        # n.b. don't resave extract files compressed if 'kind' is 'extract' (because the script gets killed on mpat!)
+
+        max_workers = 2 if self.low_resource else 6
+        ed = ExtractDownloader(max_workers=max_workers)
         events_files = ed.download_extracts(extract_dict['export'],
                                             GIO.define_output_directory(self.basedir, gdeltParameters.EventsKey,
                                                                         self.ymd))
@@ -314,10 +231,11 @@ class Gdelter:
 
 
     def get_extracts(self, date):
+        print("get_extracts()...")
         # check if extracts are local
         events_dir = GIO.define_output_directory(self.basedir, gdeltParameters.EventsKey, date)
         gkg_dir = GIO.define_output_directory(self.basedir, gdeltParameters.GkgKey, date)
-        if os.path.exists(events_dir) and os.path.exists((gkg_dir)) and len(os.listdir(events_dir)) > 90 and len(os.listdir(gkg_dir)) > 90 :
+        if os.path.exists(events_dir) and os.path.exists(gkg_dir) and len(os.listdir(events_dir)) > 90 and len(os.listdir(gkg_dir)) > 90 :
             self.logger.info("extract files exist locally")
             print("events_dir : {}".format(events_dir))
             print("gkg_dir    : {}".format(gkg_dir))
@@ -328,65 +246,23 @@ class Gdelter:
             self.logger.info("extract files will be downloaded from GDELT")
             gm = MasterList(self.masterlist_url, self.masterlist_file)
             # get links from masterlist file - either downloaded from GDELT web page or local file
-            date2extract_dict = gm.load_masterlist(self.local)
+            # date2extract_dict = gm.load_masterlist(self.local)
+            date2extract_dict = {"foo": "bar"}
             extract_urls = gm.get_extracts_for_date(date2extract_dict, date)
             extract_dict = self._create_extract_dict_lists(extract_urls)
             event_files, gkg_files = self.load_extract_files(extract_dict)
         return event_files, gkg_files
 
 
-
-
-
-    # -----------------------------------------------------------------------------------------------------------------
-    #   lastupdate Methods
-    # -----------------------------------------------------------------------------------------------------------------
-    def _get_lastupdate(self) -> List[str]:
-        ''' Get the `lastupdate` from either a given url or a local file
-                url => get web page, split into lines
-                file => open file, read lines
-            Parse last update and return a list of urls
-
-            Example:
-                retrieve latest update and return:
-                    ['http://data.gdeltproject.org/gdeltv2/20190311214500.export.CSV.zip',
-                    'http://data.gdeltproject.org/gdeltv2/20190311214500.mentions.CSV.zip',
-                    'http://data.gdeltproject.org/gdeltv2/20190311214500.gkg.csv.zip']
-        '''
-        if self.url:
-            urls: List[str]     # a list of urls extracted from lastupdate file
-            try:
-                response = requests.get(self.url, timeout=25)
-                status_code = response.status_code
-                if status_code != 200:
-                    self.logger.warning("Received status: {} for url: {}".format(status_code, self.url))
-                else:
-                    urls = [x.split()[-1] for x in response.text.split("\n") if x]
-            except requests.exceptions.Timeout as e:
-                self.logger.error("Timeout exception for url: {}".format(self.url))
-        elif self.masterlist_file:
-            try:
-                urls = [x.strip().split()[-1] for x in open(self.masterlist_file)]
-            except FileNotFoundError as e:
-                self.logger.error("File {} cannot be found: {}".format(self.masterlist_file, e))
-        return urls  # type: List[str]
-
-
-    # -----------------------------------------------------------------------------------------------------------------
-    #   Gdelt Event & GKG 15-minute extract Methods
-    # -----------------------------------------------------------------------------------------------------------------
-    def _create_extract_dict(self, urls):
-        '''
-        :param urls: List[str] of urls
-        :return:      Dictionary[file_type, url]
-
-        Example:
-            return a dictionary containing:
-                {'export': 'http://data.gdeltproject.org/gdeltv2/20190311214500.export.CSV.zip',
-                'mentions': 'http://data.gdeltproject.org/gdeltv2/20190311214500.mentions.CSV.zip',
-                'gkg': 'http://data.gdeltproject.org/gdeltv2/20190311214500.gkg.csv.zip'}
-        '''
-        return {u.split(".")[-3]: u.strip() for u in tqdm(urls)}
+    ####################################################################################################################
+    # Extract parsing methods
+    ####################################################################################################################
+    def process_extract_files(self, events_files, gkg_files):
+        url_ids = self.get_article_urls_from_extracts(events_files, gkg_files)
+        # iterate through all urls, downloading articles & web page metadata, save results
+        self.logger.info("Downloading and saving articles & metadata from GDELT news articles ...")
+        self._download_and_save_articles(url_ids, self.ymd)
+        return len(url_ids)
 
 
     def _create_extract_dict_lists(self, urls):
@@ -408,9 +284,6 @@ class Gdelter:
         return dd
 
 
-    # -----------------------------------------------------------------------------------------------------------------
-    #   Gdelt Event & GKG File Methods
-    # -----------------------------------------------------------------------------------------------------------------
     '''  list version of `_parse_gdelt_file()`  '''
     def _parse_gdelt_files(self, files, gdelt_type):
         id_url = []
@@ -445,9 +318,30 @@ class Gdelter:
         return id_url
 
 
-    # -----------------------------------------------------------------------------------------------------------------
-    #   Article Methods
-    # -----------------------------------------------------------------------------------------------------------------
+    ####################################################################################################################
+    # Article methods
+    ####################################################################################################################
+    def _download_and_save_articles(self, url_ids, ymd):
+        # download & save article; collect list of metadata about each
+        ad = ArticleDownloader(self.basedir, self.status_dir, ymd)
+        num_downloads, num_urls, total_bytes = ad.download_articles(url_ids, self.gdelt_ymd)
+        self.logger.info("Successfully downloaded {} of {} urls. Total bytes: {}".format(num_downloads, num_urls, total_bytes))
+
+
+
+    def get_article_urls_from_extracts(self, events_files, gkg_files):
+        self.logger.info("processing event & gkg extract files...")
+        # parse Events & GKG files; create a master list of [url, event_id, gkg_id]
+        self.logger.info("Parsing event and gkg extract files ...")
+        event_id_urls = self._parse_gdelt_files(events_files, gdeltParameters.EventsKey)
+        gkg_id_urls = self._parse_gdelt_files(gkg_files, gdeltParameters.GkgKey)
+
+        # merge event and gkg urls from event_id_urls, gkg_id_urls lists
+        self.logger.info("creating a single list of article urls ...")
+        url_ids = self._create_event_gkg_url_dict(event_id_urls, gkg_id_urls)
+        return url_ids
+
+
     def _create_event_gkg_url_dict(self, event_id_urls, gkg_id_urls):
         '''
         Merge event and gkg urls (i.e. from event_id_urls & gkg_id_urls), dropping duplicates
@@ -483,50 +377,47 @@ class Gdelter:
         return url_ids
 
 
-    # -----------------------------------------------------------------------------------------------------------------
-    #   Helper Methods
-    # -----------------------------------------------------------------------------------------------------------------
+    ####################################################################################################################
+    # Lastupdate Methods
+    ####################################################################################################################
+    def _get_lastupdate(self) -> List[str]:
+        ''' Get the `lastupdate` from either a given url or a local file
+                url => get web page, split into lines
+                file => open file, read lines
+            Parse last update and return a list of urls
+
+            Example:
+                retrieve latest update and return:
+                    ['http://data.gdeltproject.org/gdeltv2/20190311214500.export.CSV.zip',
+                    'http://data.gdeltproject.org/gdeltv2/20190311214500.mentions.CSV.zip',
+                    'http://data.gdeltproject.org/gdeltv2/20190311214500.gkg.csv.zip']
+        '''
+        if self.url:
+            urls: List[str]     # a list of urls extracted from lastupdate file
+            try:
+                response = requests.get(self.url, timeout=25)
+                status_code = response.status_code
+                if status_code != 200:
+                    self.logger.warning("Received status: {} for url: {}".format(status_code, self.url))
+                else:
+                    urls = [x.split()[-1] for x in response.text.split("\n") if x]
+            except requests.exceptions.Timeout as e:
+                self.logger.error("Timeout exception for url: {}".format(self.url))
+        elif self.masterlist_file:
+            try:
+                urls = [x.strip().split()[-1] for x in open(self.masterlist_file)]
+            except FileNotFoundError as e:
+                self.logger.error("File {} cannot be found: {}".format(self.masterlist_file, e))
+        return urls  # type: List[str]
+
+
+    ####################################################################################################################
+    # Helper Methods
+    ####################################################################################################################
     def _get_gdelt_date(self, urls):
         gdelt_timestamp = os.path.basename(urls[0]).split(".")[0]
         return gdelt_timestamp[:8], gdelt_timestamp   # only return the year-month-date part
 
-
-    # def _already_exists(self, filename, article_dir, gdelt_ymd):
-    #     gutils = GUtils()
-    #     html_file = GIO.html_content_filepath(article_dir, gdelt_ymd, filename, True)
-    #     content_file = GIO.html_content_filepath(article_dir, gdelt_ymd, filename)
-    #     if os.path.exists(html_file) or os.path.exists(content_file) or os.path.exists(html_file + ".gz") or os.path.exists(content_file + ".gz"):
-    #         return True
-    #     return False
-
-
-    # def _download_article_url(self, url_ids, metadata_dict, gdelt_ymd):
-    #     url, eid, gid = url_ids
-    #     filename = eid if eid else  "g_{}".format(gid)
-    #
-    #     if not self._already_exists(filename, self.article_dir, gdelt_ymd):
-    #         Downloader(url, eid, gid, metadata_dict, filename,
-    #                    self.article_dir,
-    #                    self.status_dir,
-    #                    self.metadata_dict_dir,
-    #                    self.page_link_dir,
-    #                    self.domain_dir,
-    #                    self.ymd).start()
-    #     else:
-    #         self.logger.info("{} already exists".format(filename))
-
-
-    # def _save_article_stats(self, metadata_dict, name):
-    #     url_metadata = list(metadata_dict.values())
-    #     file = os.path.join(self.status_dir, self.ymd, "{}_{}.csv".format(self.gdelt_ymd, name))
-    #     self.logger.info("saving latest results to {}".format(file))
-    #     os.makedirs(os.path.dirname(file), exist_ok=True)
-    #     df = pd.DataFrame(url_metadata, columns=gdeltParameters.metadata_columns)
-    #     # n.b. to avoid UnicodeEncodeError errors encode a problematic series first and then decode back to utf-8
-    #     df['title'] = df['title'].map(lambda x: x.encode('unicode-escape').decode('utf-8'))
-    #     # save metadata as a gzip-ed CSV file to `metadata` directory
-    #     df.to_csv("{}.gz".format(file), sep="\t", index=False, compression="gzip", encoding='utf-8')
-    #
 
     def _validate_date(self, date_text):
         # TODO : validate that date is a valid range -> not in the future or before Gdelt began
@@ -536,8 +427,9 @@ class Gdelter:
             raise ValueError("Incorrect data format, should be YYYYMMDD")
 
 
+    # ==================================================================================================================
 
-########################################################################################################################
+
 '''
 Four run options
 
@@ -577,6 +469,16 @@ Functionality
     
 '''
 
+
+def log_time_msg(base_dir, kind, machine, msg):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    file = os.path.join(base_dir, "log-{}.txt".format(machine))
+    with open(file, "a") as fo:
+        fo.write("{} : {} : {}\n".format(kind, now, msg))
+
+
+
+
 # parse lastupdate (local or online); download and save all articles
 LastupdateKey = "lastupdate"
 # download or load masterlist file, parse for given YMD date, download and save event & gkg files
@@ -594,7 +496,8 @@ LastupdateUrlKey = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
 @click.option('--file', '-f')
 @click.option('--basedir', '-d')
 @click.option('--date', '-y')
-def main(local, kind, url, file, basedir, date):
+@click.option('--machine', '-m')
+def main(local, kind, url, file, basedir, date, machine="titanx"):
     # basedir must be specified
     if not basedir:
         raise Exception("Base directory was not specified")
@@ -614,23 +517,35 @@ def main(local, kind, url, file, basedir, date):
     warnings.filterwarnings(action='ignore', category=UserWarning)
     warnings.filterwarnings(action='ignore', category=FutureWarning)
 
-    g = Gdelter(url=url, basedir=basedir, local=local)
+    starttime = datetime.now()
+    low_resource = True if machine == "mpat" else False
+    g = Gdelter(url=url, basedir=basedir, local=local, low_resource=low_resource)
 
     if kind == LastupdateKey:
-        g.process_last_update()
+        msg = g.process_last_update()
     if kind == MasterKey:
-        g.process_gdelt_extract_files(local, date)
+        msg = g.process_gdelt_extract_files(local, date)
     if kind == BackfillKey:
-        g.backfill_articles(local, date)
-    if kind==ExtractKey:
-        g.process_gdelt_extract_files(local, date)
+        msg = g.backfill_articles(local, date)
+    if kind == ExtractKey:
+        msg = g.process_gdelt_extract_files(local, date)
 
-
-    print("\tend time:\t{}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    endtime = datetime.now()
+    delta = endtime - starttime
+    mm, ss = divmod(delta.seconds, 60)
+    hh, mm = divmod(mm, 60)
+    duration = "{}h {}m {}s".format(hh, mm, int(ss))
+    print("\tstart time: {}, \tend time: {}\tduration: {}".format(
+            starttime.strftime("%Y-%m-%d %H:%M:%S"),
+            endtime.strftime("%Y-%m-%d %H:%M:%S"),
+            str(duration)))
+    log_time_msg(basedir, kind, machine, msg)
 
 
 if __name__ == '__main__':
     main()
+
+
 
 
 '''
@@ -643,7 +558,7 @@ if __name__ == '__main__':
     >>> web url
 python3 Gdelter.py -o -d /Users/chagerman/Projects/2019_News/Data/Gdelt_out -k lastupdate
 
-python3 Gdelter.py -o -d /Users/chagerman/Projects/2019_News/Gdelt_Data -k lastupdate
+python3 Gdelter.py -o -d /Users/chagerman/Projects/NewsAggregator/Data/Gdelt_Data -k lastupdate
 
 
 
@@ -676,7 +591,7 @@ python3 Gdelter.py -o -d /Users/chagerman/Projects/2019_News/Data/Gdelt_out -k b
 
 python3 Gdelter.py -o -d /Users/chagerman/Projects/2019_News/Data/Gdelt_out -k extract -y 20190228
 python3 Gdelter.py -o -d /Users/chagerman/Projects/2019_News/Data/Gdelt_out -k extract -y 20190208
-
+python3 Gdelter.py -o -d /home/chagerman/Data/Gdelt_Data -k extract -y 20190316
 
 
 

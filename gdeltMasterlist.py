@@ -1,4 +1,5 @@
 
+import coloredlogs
 import logging
 import os
 import threading
@@ -36,6 +37,7 @@ class MasterList:
         self.masterlist_url = url
 
         # create logger with 'spam_application'
+        coloredlogs.install()
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('Masterlist')
 
@@ -61,7 +63,6 @@ class MasterList:
 
     ###################################################################################################################
 
-    # WIP ------------------------------------------------------------------------------------------
     def get_extracts_for_date(self, date2extract_dict, ymd):
         #  http://data.gdeltproject.org/gdeltv2/20150218230000.export.CSV.zip
         # 'http://data.gdeltproject.org/gdeltv2/20190201010000.export.CSV.zip'
